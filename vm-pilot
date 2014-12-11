@@ -1,0 +1,84 @@
+#!/bin/sh
+#
+# Runs as dirac. Sets up to run vm-dirac-pilot.py
+#
+# Parameters: DIRAC site name (VAC.Example.cc)
+
+date --utc +"%Y-%m-%d %H:%M:%S %Z vm-pilot Start vm-pilot"
+
+# $1 is DIRAC site name; if given, $2 is setup
+export LHCBDIRAC_SETUP="${2:-LHCb-Production}"
+
+# We might be running from cvmfs or from /var/spool/checkout
+export CONTEXTDIR=`readlink -f \`dirname $0\``
+
+export TMPDIR=/scratch/
+export EDG_WL_SCRATCH=$TMPDIR
+
+# Export proper Grid certificates
+export X509_CERT_DIR=/cvmfs/grid.cern.ch/etc/grid-security/certificates
+export X509_VOMS_DIR=/cvmfs/grid.cern.ch/etc/grid-security/vomsdir
+
+export X509_USER_PROXY=/scratch/dirac/etc/grid-security/hostkey.pem
+
+# Needed to find software area
+export VO_LHCB_SW_DIR=/cvmfs/lhcb.cern.ch
+
+# So these NFS mounted directories can be found
+export MACHINEFEATURES=/etc/machinefeatures
+export JOBFEATURES=/etc/jobfeatures
+
+# Export VM instance vmtype and UUID so they appear as a LocalJobID to DIRAC watchdog
+export JOB_ID=`cat /etc/machinefeatures/vac_vmtype`:`cat /etc/machinefeatures/vac_uuid`
+
+# This is just for our glexec alternative that uses sudo
+export GLITE_LOCATION=/opt/glite
+
+# Clear it to avoid problems ( be careful if there is more than one agent ! )
+rm -rf /tmp/area/*
+
+# Copy to $HOME since vm-dirac-pilot.py changes its permissions
+cp -p $CONTEXTDIR/vm-dirac-pilot.py $CONTEXTDIR/vm-dirac-install.py $HOME
+
+# Quick test of dirac-architecture
+cp -p $CONTEXTDIR/dirac-architecture $HOME
+
+# Can get rid of this once https://github.com/DIRACGrid/DIRAC/pull/1916 is available
+cp -p $CONTEXTDIR/glexecComputingElement.py $HOME
+
+# Can get rid of this once LHCbDIRAC traps Nagios exceptions
+cp -p $CONTEXTDIR/UploadSAMLogs.py $HOME
+cp -p $CONTEXTDIR/NagiosConnector.py $HOME
+
+# Use Vac space as the virtual CE name
+export CE_NAME=`cat /etc/machinefeatures/vac_space`
+date --utc +"%Y-%m-%d %H:%M:%S %Z vm-pilot CE_NAME=$CE_NAME from /etc/machinefeatures/vac_space"
+
+export CPUTIME=`cat /etc/jobfeatures/cpu_limit_secs`
+
+# The release to use, which must be one that the matcher will accept
+export LHCBDIRAC_RELEASE=`$CONTEXTDIR/get-pilot-version $CONTEXTDIR/dirac-cs.cfg $LHCBDIRAC_SETUP`
+date --utc +"%Y-%m-%d %H:%M:%S %Z vm-pilot Got pilot version '$LHCBDIRAC_RELEASE' from the CS"
+
+# CEType=glexec must be (nearly?) the first parameter to the JobAgent, otherwise ignored!??!
+# These should become vm-dirac-pilot.py/lhcb-pilot CLI parameters?
+echo "-o CEType=glexec -o StopAfterFailedMatches=0" > JobAgent.extra.cfg
+
+python ./vm-dirac-pilot.py \
+ --cert \
+ --setup $LHCBDIRAC_SETUP \
+ --project LHCb \
+ --release $LHCBDIRAC_RELEASE \
+ --MaxCycles 1 \
+ --configurationServer dips://lhcb-conf-dirac.cern.ch:9135/Configuration/Server,dips://lhcbprod.pic.es:9135/Configuration/Server \
+ --extraPackages LHCb \
+ --CPUTime "$CPUTIME" \
+ --Name "$CE_NAME" \
+ --name "$1" \
+ -o '/LocalSite/SubmitPool=Test' \
+ -o "/LocalSite/CPUTime=$CPUTIME" \
+ -o "/LocalSite/MaxCPUTime=$CPUTIME" \
+ -o '/LocalSite/CPUScalingFactor=8.8' \
+ -o '/LocalSite/CPUNormalizationFactor=8.8' \
+ -o '/DIRAC/Security/CertFile=/scratch/dirac/etc/grid-security/hostkey.pem' \
+ -o '/DIRAC/Security/KeyFile=/scratch/dirac/etc/grid-security/hostkey.pem'

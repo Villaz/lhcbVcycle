@@ -1,0 +1,54 @@
+#!/bin/sh
+#
+#  sudo wrapper that can be used in place of glexec with DIRAC
+#  JobAgent. Should be installed at /opt/glite/sbin/glexec
+#
+#  Andrew McNab, University of Manchester.
+#  Copyright (c) 2014. All rights reserved.
+#
+#  Redistribution and use in source and binary forms, with or
+#  without modification, are permitted provided that the following
+#  conditions are met:
+#
+#    o Redistributions of source code must retain the above
+#      copyright notice, this list of conditions and the following
+#      disclaimer. 
+#    o Redistributions in binary form must reproduce the above
+#      copyright notice, this list of conditions and the following
+#      disclaimer in the documentation and/or other materials
+#      provided with the distribution. 
+#
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+#  CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+#  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+#  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+#  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS
+#  BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+#  EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+#  TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+#  DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+#  ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+#  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+#  OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+#  POSSIBILITY OF SUCH DAMAGE.
+#
+#  Contacts: Andrew.McNab@cern.ch  http://www.gridpp.ac.uk/vac/
+#
+
+# diracuser needs to be able to create directories here
+# (and DIRAC messes with the permissions so we have to redo it here)
+chmod ugo+rwxt /scratch/dirac
+
+# diracuser needs to be able to read proxy for the cp+chmod commands
+chmod ugo+r $GLEXEC_CLIENT_CERT
+
+# for DM commands to work, proxy must be owned by diracuser
+sudo -u diracuser sh -c "cp $GLEXEC_CLIENT_CERT /tmp/userproxy.pem ; chmod go-rwx /tmp/userproxy.pem"
+
+# make a config file for diracuser that uses its proxy
+if [ ! -r /scratch/dirac/etc/diracuser.cfg ] ; then
+ sed 's:/.*hostkey.pem:/tmp/userproxy.pem:' /scratch/dirac/etc/dirac.cfg > /scratch/dirac/etc/diracuser.cfg
+fi
+
+# now we can run the payload job wrapper
+exec sudo -u diracuser PATH=$PATH DIRACSYSCONFIG=/scratch/dirac/etc/diracuser.cfg LD_LIBRARY_PATH=$LD_LIBRARY_PATH PYTHONPATH=$PYTHONPATH X509_USER_PROXY=/tmp/userproxy.pem $*

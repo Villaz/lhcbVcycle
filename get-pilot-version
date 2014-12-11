@@ -1,0 +1,18 @@
+#!/bin/sh
+#
+# Return the current LHCbDIRAC version for pilots from CS
+#
+# The location of a suitable dirac.cfg must be given on the command line
+#
+# andrew.mcnab@cern.ch  Apr 2014
+#
+
+export DIRACSYSCONFIG="$1"
+
+export LHCBDIRAC_SETUP="${2:-LHCb-Production}"
+
+. /cvmfs/lhcb.cern.ch/lib/LbLogin.sh >&2
+
+. SetupProject.sh LHCbDirac >&2
+
+python -c "import DIRAC;from DIRAC.Core.Base import Script;Script.parseCommandLine();print DIRAC.gConfig.getValue('/Operations/$LHCBDIRAC_SETUP/Pilot/Version',[])[0]"
