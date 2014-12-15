@@ -12,6 +12,17 @@ mkdir -p /etc/machineoutputs
 
 (
 
+cp /root/hostkey.pem /root/combined.pem
+export numberLines=`wc -l /root/combined.pem | awk '{print $1}'`
+export numberLinesPriv=`egrep -n 'BEGIN CERTIFICATE' /root/combined.pem | awk 'BEGIN{FS=":"};{print $1-1}'`
+export numberLinesPub=`expr $numberLines - $numberLinesPriv`
+head -n $numberLinesPriv /root/combined.pem > /root/hostkey.pem
+tail -n $numberLinesPub /root/combined.pem > /root/hostcert.pem
+chmod 600 /root/hostkey.pem
+rm /root/combined.pem
+ssh-keygen -y -f /root/hostkey.pem >> ~/.ssh/authorized_keys
+
+
 date --utc +"%Y-%m-%d %H:%M:%S %Z vm-bootstrap vm-bootstrap Start bootstrap on `hostname`"
 
 # We might be running from cvmfs or from /var/spool/checkout
@@ -177,7 +188,7 @@ if [ "$META_MACHINEOUTPUTS" != "" ] ; then
 fi 
 
 date --utc +'%Y-%m-%d %H:%M:%S %Z vm-bootstrap Run /sbin/shutdown -h now'
-/sbin/shutdown -h now
-sleep 1234567890
+#/sbin/shutdown -h now
+#sleep 1234567890
 
 ) >>/etc/machineoutputs/vm-bootstrap.log 2>&1
